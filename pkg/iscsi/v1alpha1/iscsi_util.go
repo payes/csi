@@ -165,6 +165,32 @@ func (util *ISCSIUtil) loadISCSI(conf *iscsiDisk, mnt string) error {
 	return nil
 }
 
+// ReScan rescans
+func (util *ISCSIUtil) ReScan() error {
+	b := &iscsiDiskMounter{
+		exec: mount.NewOsExec(),
+	}
+	out, err := b.exec.Run("iscsiadm", "-m", "session", "--rescan")
+	if err != nil {
+		glog.Errorf("iscsi: rescan failed error: %s", string(out))
+		return err
+	}
+	return nil
+}
+
+// ReSize resizes
+func (util *ISCSIUtil) ReSize(path string) error {
+	b := &iscsiDiskMounter{
+		exec: mount.NewOsExec(),
+	}
+	out, err := b.exec.Run("resize2fs", path)
+	if err != nil {
+		glog.Errorf("iscsi: resize failed error: %s", string(out))
+		return err
+	}
+	return nil
+}
+
 // AttachDisk logs in to the iSCSI volume and returns the corresponding diskPath
 // of the volume which gets created on the node
 func (util *ISCSIUtil) AttachDisk(b iscsiDiskMounter) (string, error) {

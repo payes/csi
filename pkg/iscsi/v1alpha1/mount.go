@@ -30,6 +30,24 @@ func UnmountAndDetachDisk(vol *apis.CSIVolume, path string) error {
 	return nil
 }
 
+func ResizeVolume(volumePath string) error {
+	mounter := mount.New("")
+	list, _ := mounter.List()
+	for _, mpt := range list {
+		if mpt.Path == volumePath {
+			util := &ISCSIUtil{}
+			if err := util.ReScan(); err != nil {
+				return err
+			}
+			if err := util.ReSize(mpt.Path); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	return nil
+}
+
 // AttachAndMountDisk logs in to the iSCSI Volume
 // and mounts the disk to the specified path
 func AttachAndMountDisk(vol *apis.CSIVolume) (string, error) {

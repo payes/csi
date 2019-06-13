@@ -300,7 +300,17 @@ func (ns *node) NodeExpandVolume(
 	req *csi.NodeExpandVolumeRequest,
 ) (*csi.NodeExpandVolumeResponse, error) {
 
-	return nil, nil
+	if err := iscsi.ResizeVolume(req.GetVolumePath()); err != nil {
+		return nil, status.Errorf(
+			codes.Internal,
+			"failed to handle NodeExpandVolumeRequest for %s, {%s}",
+			req.VolumeId,
+			err.Error(),
+		)
+	}
+	return &csi.NodeExpandVolumeResponse{
+		CapacityBytes: req.GetCapacityRange().GetRequiredBytes(),
+	}, nil
 }
 
 // NodeGetCapabilities returns capabilities supported
@@ -317,7 +327,7 @@ func (ns *node) NodeGetCapabilities(
 			{
 				Type: &csi.NodeServiceCapability_Rpc{
 					Rpc: &csi.NodeServiceCapability_RPC{
-						Type: csi.NodeServiceCapability_RPC_UNKNOWN,
+						Type: csi.NodeServiceCapability_RPC_EXPAND_VOLUME,
 					},
 				},
 			},
