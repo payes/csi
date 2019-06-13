@@ -12,6 +12,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	apismaya "github.com/openebs/csi/pkg/apis/openebs.io/maya/v1alpha1"
 	errors "github.com/openebs/csi/pkg/generated/maya/errors/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -73,7 +74,6 @@ func ProvisionVolume(req *csi.CreateVolumeRequest) (*apismaya.CASVolume, error) 
 
 	if err.Error() == http.StatusText(404) {
 		logrus.Infof("volume {%s} does not exist: will attempt to create", req.GetName())
-
 		err = CreateVolume(casVolume)
 		if err != nil {
 			logrus.Errorf(
@@ -82,7 +82,6 @@ func ProvisionVolume(req *csi.CreateVolumeRequest) (*apismaya.CASVolume, error) 
 				err)
 			return nil, err
 		}
-
 		err = ReadVolume(req.GetName(), namespace, storageclass, &casVolume)
 		if err != nil {
 			logrus.Errorf("failed to read volume {%s}: %v", req.GetName(), err)
@@ -91,7 +90,6 @@ func ProvisionVolume(req *csi.CreateVolumeRequest) (*apismaya.CASVolume, error) 
 
 		logrus.Infof("volume {%s} created successfully", req.GetName())
 	}
-
 	return &casVolume, nil
 }
 
@@ -137,6 +135,64 @@ func CreateVolume(vol apismaya.CASVolume) error {
 	}
 
 	logrus.Infof("volume {%s} created successfully", vol.Name)
+	return nil
+}
+
+// ResizeVolume resizes the CAS Volume
+// through an API call to maya-apiserver
+func ResizeVolume(volName, size string) error {
+
+	url := MAPIServerEndpoint + "/latest/volumes/resize/"
+
+	// Marshal serializes the value provided into a json document
+	vol := apismaya.CASVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: volName,
+		},
+		Spec: apismaya.CASVolumeSpec{
+			Capacity: size,
+		},
+	}
+
+	// Marshal serializes the values
+	jsonValue, err := json.Marshal(vol)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonValue))
+	if err != nil {
+		logrus.Infof("error while creating newRequest: %v", err)
+		return err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+
+	c := &http.Client{
+		Timeout: timeout,
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		logrus.Errorf("Error when connecting maya-apiserver %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logrus.Errorf("Unable to read response from maya-apiserver %v", err)
+		return err
+	}
+
+	code := resp.StatusCode
+	if code != http.StatusOK {
+		logrus.Errorf("%s: failed to resize volume '%s': response: %+v",
+			http.StatusText(code), vol.Name, string(data))
+		return fmt.Errorf("%s: failed to resize volume '%s': response: %+v",
+			http.StatusText(code), vol.Name, string(data))
+	}
+
+	logrus.Infof("volume {%s} resized successfully", vol.Name)
 	return nil
 }
 

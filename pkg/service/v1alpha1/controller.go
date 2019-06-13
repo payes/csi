@@ -18,10 +18,10 @@ package v1alpha1
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	errors "github.com/openebs/csi/pkg/generated/maya/errors/v1alpha1"
 	csipayload "github.com/openebs/csi/pkg/payload/v1alpha1"
 	"github.com/openebs/csi/pkg/utils/v1alpha1"
 	csivolume "github.com/openebs/csi/pkg/volume/v1alpha1"
@@ -67,6 +67,7 @@ func newControllerCapabilities() []*csi.ControllerServiceCapability {
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 		csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 	} {
 		capabilities = append(capabilities, fromType(cap))
 	}
@@ -117,10 +118,11 @@ func (cs *controller) CreateVolume(
 
 	err := cs.validateRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
 	if err != nil {
-		return nil, errors.Wrapf(
-			err,
-			"failed to handle create volume request for {%s}",
+		return nil, status.Errorf(
+			codes.Internal,
+			"failed to handle create volume request for %s, {%s}",
 			req.GetName(),
+			err.Error(),
 		)
 	}
 
@@ -213,20 +215,22 @@ func (cs *controller) DeleteVolume(
 
 	err := cs.validateRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
 	if err != nil {
-		return nil, errors.Wrapf(
-			err,
-			"failed to handle delete volume request for {%s}",
+		return nil, status.Errorf(
+			codes.Internal,
+			"failed to handle delete volume request for %s, {%s}",
 			req.VolumeId,
+			err.Error(),
 		)
 	}
 
 	// this call is made just to fetch pvc namespace
 	pv, err := utils.FetchPVDetails(req.VolumeId)
 	if err != nil {
-		return nil, errors.Wrapf(
-			err,
-			"failed to handle delete volume request for {%s}",
+		return nil, status.Errorf(
+			codes.Internal,
+			"failed to handle delete volume request for %s, {%s}",
 			req.VolumeId,
+			err.Error(),
 		)
 	}
 
@@ -235,10 +239,11 @@ func (cs *controller) DeleteVolume(
 	// send delete request to maya apiserver
 	err = utils.DeleteVolume(req.VolumeId, pvcNamespace)
 	if err != nil {
-		return nil, errors.Wrapf(
-			err,
-			"failed to handle delete volume request for {%s}",
+		return nil, status.Errorf(
+			codes.Internal,
+			"failed to handle delete volume request for %s, {%s}",
 			req.VolumeId,
+			err.Error(),
 		)
 	}
 
@@ -282,14 +287,23 @@ func (cs *controller) ControllerGetCapabilities(
 }
 
 // ControllerExpandVolume resizes previously provisioned volume
-//
-// This implements csi.ControllerServer
 func (cs *controller) ControllerExpandVolume(
 	ctx context.Context,
 	req *csi.ControllerExpandVolumeRequest,
 ) (*csi.ControllerExpandVolumeResponse, error) {
-
-	return nil, status.Error(codes.Unimplemented, "")
+	size := strconv.FormatInt(req.CapacityRange.RequiredBytes, 10)
+	if err := utils.ResizeVolume(req.VolumeId, size+"B"); err != nil {
+		return nil, status.Errorf(
+			codes.Internal,
+			"failed to handle ControllerExpandVolumeRequest for %s, {%s}",
+			req.VolumeId,
+			err.Error(),
+		)
+	}
+	return csipayload.NewControllerExpandVolumeResponseBuilder().
+		WithCapacityBytes(req.GetCapacityRange().GetRequiredBytes()).
+		WithNodeExpansionRequired(true).
+		Build(), nil
 }
 
 // validateCapabilities validates if provided capabilities
