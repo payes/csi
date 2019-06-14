@@ -30,6 +30,8 @@ func UnmountAndDetachDisk(vol *apis.CSIVolume, path string) error {
 	return nil
 }
 
+// ResizeVolume rescans the iSCSI session and runs the resize to filesystem
+// command on that particular device
 func ResizeVolume(volumePath string) error {
 	mounter := mount.New("")
 	list, _ := mounter.List()
@@ -39,7 +41,7 @@ func ResizeVolume(volumePath string) error {
 			if err := util.ReScan(); err != nil {
 				return err
 			}
-			if err := util.ReSize(mpt.Path); err != nil {
+			if err := util.ReSizeFS(mpt.Path); err != nil {
 				return err
 			}
 			break

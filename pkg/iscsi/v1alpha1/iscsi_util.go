@@ -165,7 +165,7 @@ func (util *ISCSIUtil) loadISCSI(conf *iscsiDisk, mnt string) error {
 	return nil
 }
 
-// ReScan rescans
+// ReScan rescans all the iSCSI sessions on the host
 func (util *ISCSIUtil) ReScan() error {
 	b := &iscsiDiskMounter{
 		exec: mount.NewOsExec(),
@@ -178,8 +178,9 @@ func (util *ISCSIUtil) ReScan() error {
 	return nil
 }
 
-// ReSize resizes
-func (util *ISCSIUtil) ReSize(path string) error {
+// ReSizeFS can be used to run a resize command on the filesystem to expand the
+// filesystem to the actual size of the device
+func (util *ISCSIUtil) ReSizeFS(path string) error {
 	b := &iscsiDiskMounter{
 		exec: mount.NewOsExec(),
 	}
