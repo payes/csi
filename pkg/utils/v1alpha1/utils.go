@@ -73,11 +73,18 @@ func init() {
 	// If this env is not set its better to crash the container since its a
 	// configuration problem. Without this service its not possible to create
 	// or delete volumes
+	updateMAPIServerEndPoint()
+
+	Volumes = map[string]*apis.CSIVolume{}
+	ReqMountList = make(map[string]bool)
+
+}
+
+func updateMAPIServerEndPoint() {
 	MAPIServiceName := os.Getenv("OPENEBS_MAPI_SVC")
 	if MAPIServiceName == "" {
 		logrus.Fatalf("OPENEBS_MAPI_SVC environment variable not set")
 	}
-
 	svc, err := service.NewKubeclient().
 		WithNamespace(OpenEBSNamespace).
 		Get(MAPIServiceName, metav1.GetOptions{})
@@ -91,10 +98,6 @@ func init() {
 	svcIP := svc.Spec.ClusterIP
 	svcPort := strconv.FormatInt(int64(svc.Spec.Ports[0].Port), 10)
 	MAPIServerEndpoint = "http://" + svcIP + ":" + svcPort
-
-	Volumes = map[string]*apis.CSIVolume{}
-	ReqMountList = make(map[string]bool)
-
 }
 
 // parseEndpoint should have a valid prefix(unix/tcp) to return a valid endpoint parts

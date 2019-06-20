@@ -3,8 +3,6 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 
@@ -95,74 +93,33 @@ func ProvisionVolume(req *csi.CreateVolumeRequest) (*apismaya.CASVolume, error) 
 	return &casVolume, nil
 }
 
-// CreateVolume creates the CAS volume through
-// an API call to maya apiserver
-func CreateVolume(vol apismaya.CASVolume) error {
-
-	url := MAPIServerEndpoint + "/latest/volumes/"
-
-	// Marshal serializes the value provided into a json document
-	jsonValue, _ := json.Marshal(vol)
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonValue))
-	if err != nil {
-		logrus.Infof("error while creating newRequest: %v", err)
-		return err
-	}
-
-	req.Header.Add("Content-Type", "application/json")
-
-	c := &http.Client{
-		Timeout: timeout,
-	}
-	resp, err := c.Do(req)
-	if err != nil {
-		logrus.Errorf("Error when connecting maya-apiserver %v", err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		logrus.Errorf("Unable to read response from maya-apiserver %v", err)
-		return err
-	}
-
-	code := resp.StatusCode
-	if code != http.StatusOK {
-		logrus.Errorf("%s: failed to create volume '%s': response: %+v",
-			http.StatusText(code), vol.Name, string(data))
-		return fmt.Errorf("%s: failed to create volume '%s': response: %+v",
-			http.StatusText(code), vol.Name, string(data))
-	}
-
-	logrus.Infof("volume {%s} created successfully", vol.Name)
-	return nil
-}
-
-// ReadVolume to get the info of CAS volume through a API call to m-apiserver
-func ReadVolume(vname, namespace, storageclass string, obj interface{}) error {
-
-	url := MAPIServerEndpoint + "/latest/volumes/" + vname
-
-	logrus.Infof("[DEBUG] Get details for Volume :%v", string(vname))
-
-	req, err := http.NewRequest("GET", url, nil)
+func requestMAPIServer(reqType, url, namespace, storageclass string, obj interface{}, jsonValue []byte) error {
+	var retried bool
+connect:
+	req, err := http.NewRequest(reqType, url, bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("namespace", namespace)
+	if namespace != "" {
+		req.Header.Set("namespace", namespace)
+	}
 	// passing storageclass info as a request header which will extracted by the
 	// Maya-apiserver to get the CAS template name
-	req.Header.Set(string(apismaya.StorageClassHeaderKey), storageclass)
-
+	if storageclass != "" {
+		req.Header.Set(string(apismaya.StorageClassHeaderKey), storageclass)
+	}
 	c := &http.Client{
 		Timeout: timeout,
 	}
 	resp, err := c.Do(req)
 	if err != nil {
 		logrus.Errorf("Error when connecting to maya-apiserver %v", err)
+		if !retried {
+			retried = true
+			updateMAPIServerEndPoint()
+			goto connect
+		}
 		return err
 	}
 	defer resp.Body.Close()
@@ -173,39 +130,31 @@ func ReadVolume(vname, namespace, storageclass string, obj interface{}) error {
 			http.StatusText(code))
 		return errors.New(http.StatusText(code))
 	}
-	logrus.Info("volume Details Successfully Retrieved")
-	return json.NewDecoder(resp.Body).Decode(obj)
+	if obj != nil {
+		return json.NewDecoder(resp.Body).Decode(obj)
+	}
+	return nil
+}
+
+// ReadVolume to get the info of CAS volume through a API call to m-apiserver
+func ReadVolume(vname, namespace, storageclass string, obj interface{}) error {
+	url := MAPIServerEndpoint + "/latest/volumes/" + vname
+	return requestMAPIServer("GET", url, namespace, storageclass, obj, nil)
 }
 
 // DeleteVolume deletes CAS volume through an
 // API call to maya apiserver
 func DeleteVolume(name, namespace string) error {
-
 	url := MAPIServerEndpoint + "/latest/volumes/" + name
-	req, err := http.NewRequest("DELETE", url, nil)
-	if err != nil {
-		return err
-	}
+	return requestMAPIServer("DELETE", url, namespace, "", "", nil)
+}
 
-	req.Header.Set("namespace", namespace)
-	c := &http.Client{
-		Timeout: timeout,
-	}
+// CreateVolume creates the CAS volume through
+// an API call to maya apiserver
+func CreateVolume(vol apismaya.CASVolume) error {
 
-	resp, err := c.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	code := resp.StatusCode
-	if code != http.StatusOK {
-		return errors.Errorf(
-			"failed to delete volume {%s}: got http code {%s}",
-			url,
-			http.StatusText(code),
-		)
-	}
-
-	return nil
+	url := MAPIServerEndpoint + "/latest/volumes/"
+	// Marshal serializes the value provided into a json document
+	jsonValue, _ := json.Marshal(vol)
+	return requestMAPIServer("POST", url, "", "", "", jsonValue)
 }
