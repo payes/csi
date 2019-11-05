@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,10 +11,15 @@ import (
 	cvc "github.com/openebs/cstor-csi/pkg/cvc/v1alpha1"
 	"github.com/openebs/cstor-csi/pkg/version"
 	csivol "github.com/openebs/cstor-csi/pkg/volume/v1alpha1"
+	"github.com/pkg/errors"
 
+	ksnap "github.com/kubernetes-csi/external-snapshotter/pkg/client/clientset/versioned"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
 )
 
 const (
@@ -90,6 +94,41 @@ func GetVolume(volumeID string) (*apismaya.CStorVolumeClaim, error) {
 	return cvc.NewKubeclient().
 		WithNamespace(OpenEBSNamespace).
 		Get(volumeID, metav1.GetOptions{})
+}
+
+var kubeconfig string
+
+// IsSnapshotPresent returns true if there are any snapshots on the volume
+func IsSnapshotPresent(volumeID string) (bool, error) {
+	// Get in cluster config
+
+	// Get in cluster config
+	cfg, err := getClusterConfig(kubeconfig)
+	if err != nil {
+		err = errors.Wrap(err, "error building kubeconfig")
+		return false, err
+	}
+	snapshotList := ksnap.NewForConfig(cfg).SnapshotV1beta1().VolumeSnapshots("default").List(metav1.ListOptions{})
+
+	return true, nil
+}
+
+// Cannot be unit tested
+// GetClusterConfig return the config for k8s.
+func getClusterConfig(kubeconfig string) (*rest.Config, error) {
+	var masterURL string
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		klog.Errorf("Failed to get k8s Incluster config. %+v", err)
+		if kubeconfig == "" {
+			return nil, errors.Wrapf(err, "kubeconfig is empty")
+		}
+		cfg, err = clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error building kubeconfig")
+		}
+	}
+	return cfg, err
 }
 
 // IsSourceAvailable returns true if the source volume is available

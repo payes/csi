@@ -138,6 +138,12 @@ func (cs *controller) DeleteVolume(
 	}
 
 	volumeID := req.GetVolumeId()
+	if utils.IsSnapshotPresent() {
+		return nil, status.Error(
+			codes.InvalidArgument,
+			"failed to handle delete volume request, delete snapshots before deleting volume",
+		)
+	}
 
 	// verify if the volume has already been deleted
 	cvc, err = utils.GetVolume(volumeID)
