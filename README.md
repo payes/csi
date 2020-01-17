@@ -63,7 +63,7 @@ Depending on the OS select the appropriate deployment file.
 Verify that the OpenEBS CSI Components are installed.
 
 ```
-$ kubectl get pods -n kube-system -l role=openebs-csi
+$ kubectl get pods -n kube-system -l role=openebs-cstor-csi
 NAME                       READY   STATUS    RESTARTS   AGE
 openebs-csi-controller-0   4/4     Running   0          6m14s
 openebs-csi-node-56t5g     2/2     Running   0          6m13s
